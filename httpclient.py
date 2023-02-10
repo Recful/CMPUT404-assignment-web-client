@@ -33,7 +33,14 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
+    def get_host_port(self,url):
+        o = urllib.parse.urlparse(url)
+        host = o.netloc.split(':')[0]
+        if ':' not in o.netloc:
+            port = 80
+        else:
+            port = int(o.netloc.split(':')[1])
+        return host, port
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,13 +48,18 @@ class HTTPClient(object):
         return None
 
     def get_code(self, data):
-        return None
+        code = data.splitlines()
+        code = code[0].split()[1]
+        
+        return int(code)
 
     def get_headers(self,data):
-        return None
+        
+        return data.split("\r\n\r\n")[0]
 
     def get_body(self, data):
-        return None
+        
+        return data.split("\r\n\r\n")[1]
     
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
@@ -70,11 +82,66 @@ class HTTPClient(object):
     def GET(self, url, args=None):
         code = 500
         body = ""
+        host = self.get_host_port(url)[0]
+        port = self.get_host_port(url)[1]
+        # print(host)
+        # print(port)
+        # print(type(port))
+        # path = urllib.parse.urlparse(url)
+        # print(path)
+        text = "GET %s" % url
+        text += " HTTP/1.1\r\n"
+        text += "Host: "
+        text += "%s:%d" % (host, port)
+        text += "\r\n"
+        text += "Connection: close"
+        text += "\r\n\r\n"
+        self.connect(host, port)
+        self.sendall(text)
+        return_info = self.recvall(self.socket)
+        # print("here's your response: ")
+        # print(return_info)
+        header = self.get_headers(return_info)
+        code = self.get_code(return_info)
+        body = self.get_body(return_info)
+        self.close()
+
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
         code = 500
         body = ""
+        post_content = ""
+        host = self.get_host_port(url)[0]
+        port = self.get_host_port(url)[1]
+        if args: #change the input into the format of: key1=value1&key2=value2
+            for key,value in args.items():
+                post_content += "%s=%s" % (key, value)
+                post_content += "&"
+            #get rid of the last &
+            post_content = post_content[:-1]
+        # print("post_content:")
+        # print(post_content)
+        text = "POST %s" % url
+        text += " HTTP/1.1\r\n"
+        text += "Host: "
+        text += "%s:%d" % (host, port)
+        text += "\r\n"
+        text += "Connection: close\r\n"
+        text += "Content-Type: application/x-www-form-urlencoded\r\n"
+        text += "Content-Length: %d\r\n\r\n" % (len(post_content))
+        #add the post content into the message that will be sent
+        text += post_content
+        text += "\r\n\r\n"
+
+        self.connect(host, port)
+        self.sendall(text)
+        return_info = self.recvall(self.socket)
+        header = self.get_headers(return_info)
+        code = self.get_code(return_info)
+        body = self.get_body(return_info)
+        self.close()
+
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
